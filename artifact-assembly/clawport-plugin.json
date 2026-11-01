@@ -1,0 +1,9 @@
+{
+  "packageName": "@clawport/dsh-projects",
+  "version": "0.2.0",
+  "entries": [
+    "lib/index.js",
+    "lib/client.js"
+  ],
+  "stageDirectory": ".build/clawport-plugin/package"
+}

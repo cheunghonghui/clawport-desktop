@@ -54,9 +54,16 @@ describe('desktop plugin closure', () => {
     const manifest = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as { dependencies: Record<string, string> }
+    const privateArtifact = JSON.parse(
+      await readFile(path.join(projectRoot, 'artifact-assembly', 'clawport-plugin.json'), 'utf8')
+    ) as { packageName: string; version: string }
 
     for (const row of profilePatch.flatMap((entry) => entry.insert ?? [])) {
       if (typeof row.name !== 'string') continue
+      if (row.name === privateArtifact.packageName) {
+        expect(privateArtifact.version).toBe('0.2.0')
+        continue
+      }
       expect(manifest.dependencies[row.name]).toMatch(/^file:packages\//u)
     }
   })

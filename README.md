@@ -1,8 +1,8 @@
 # ClawPort Desktop
 
-ClawPort's development fork of [DSH Desktop](https://github.com/dataelement/dsh-desktop), combining a local DSH agent and native Web UI with ClawPort cloud services. The current milestone establishes a separate application identity, local data directories, and release configuration. Cloud login and business plugins are planned; customer installers are not yet available.
+ClawPort's development fork of [DSH Desktop](https://github.com/dataelement/dsh-desktop), combining a local DSH agent and native Web UI with ClawPort cloud services. The development build supports browser-based device login and a separately supplied business plugin for projects, memories, and firm Skills. Customer installers are not yet available.
 
-See the [design](docs/superpowers/specs/2026-11-01-clawport-desktop-design.md) and [development plan](docs/superpowers/plans/2026-11-01-clawport-desktop-foundation.md). The documentation below describes the upstream product; its downloads, signing status, and services belong to Dataelem.
+See the [design](docs/superpowers/specs/2026-11-01-clawport-desktop-design.md), [development plan](docs/superpowers/plans/2026-11-01-clawport-desktop-foundation.md), and [cloud business integration](docs/clawport-cloud-business.md). The documentation below describes the upstream product; its downloads, signing status, and services belong to Dataelem.
 
 ---
 

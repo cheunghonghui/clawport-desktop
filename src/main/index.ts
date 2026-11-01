@@ -225,6 +225,9 @@ import { CloudApiClient } from './cloud/api-client'
 import { CloudCredentialVault } from './cloud/vault'
 import { CloudIdentityService } from './cloud/service'
 import { registerCloudIdentityIpc } from './cloud/ipc'
+import { CloudBusinessClient } from './cloud/business-client'
+import { registerCloudBusinessIpc } from './cloud/business-ipc'
+import { CloudHostBroker } from './cloud/host-broker'
 
 type PluginRecoveryAction = `agent:${string}` | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode' | 'auto-process' | 'check-updates' | 'rollback'
 type WebImportAction = 'import' | 'skip'
@@ -272,6 +275,8 @@ const repairDrafts = new RepairDrafts()
 let repairAgentService: RepairAgentService | undefined
 let cloudIdentityService: CloudIdentityService | undefined
 let disposeCloudIdentityIpc: (() => void) | undefined
+let disposeCloudBusinessIpc: (() => void) | undefined
+let cloudHostBroker: CloudHostBroker | undefined
 let repairAgentOpening: Promise<{ ok: boolean; error?: string }> | undefined
 /** A repair prompt from the Recovery page, started by the Safe Mode page load. */
 let pendingRepairPrompt: string | undefined
@@ -3534,6 +3539,27 @@ async function bootstrap(): Promise<void> {
     service: cloudIdentityService,
     getMainWindow: () => mainWindow
   })
+  const cloudBusinessClient = new CloudBusinessClient(
+    cloudOrigin,
+    (url, init) => net.fetch(url, init),
+    {
+      credential: () => cloudIdentityService?.businessCredential(),
+      refresh: () => cloudIdentityService?.refresh() ?? Promise.resolve(),
+      isCurrent: credential => cloudIdentityService?.isBusinessCredentialCurrent(credential) === true
+    }
+  )
+  disposeCloudBusinessIpc = registerCloudBusinessIpc({
+    ipcMain,
+    request: value => cloudBusinessClient.request(value),
+    getMainWindow: () => mainWindow
+  })
+  cloudHostBroker = new CloudHostBroker({
+    request: value => cloudBusinessClient.request(value),
+    identity: () => cloudIdentityService?.snapshot() ?? {
+      phase: 'signedOut', revision: 0, secureStorageAvailable: false
+    }
+  })
+  await cloudHostBroker.startLaunch()
   void cloudIdentityService.refresh()
   runtime = new HarnessRuntime({
     // A packaged app's stdout may be a closed pipe; only mirror logs in development.
@@ -3549,6 +3575,11 @@ async function bootstrap(): Promise<void> {
     pnpmEntryPath: bundledPnpmEntryPath(),
     pnpmRunnerPath: bundledPnpmRunnerPath(),
     hideConsoleBootstrapPath: hideConsoleBootstrapPath(),
+    launchEnvironment: profile => {
+      if (profile !== 'web' || !cloudHostBroker) return {}
+      cloudHostBroker.rotateLaunch()
+      return cloudHostBroker.launchEnvironment()
+    },
     // Keep the Harness origin stable across launches. These ports are separate
     // from the production/development mobile bridge ports (43127/43128).
     preferredPort: developmentConfig.harnessPort,
@@ -3559,6 +3590,7 @@ async function bootstrap(): Promise<void> {
         })
         : spawn(executablePath, args, options),
     onChanged: (snapshot) => {
+      if (snapshot.phase !== 'starting' && snapshot.phase !== 'ready') cloudHostBroker?.clearLaunch()
       desktopDiagnostics?.runtimeChanged(snapshot, () => runtime.flushLog(), runtime.launchAttemptId)
       if (!safeModeVisible && snapshot.phase === 'ready') lastCrashEvidence = undefined
       if (!safeModeVisible && snapshot.phase === 'failed') {
@@ -4043,8 +4075,12 @@ if (isDaemonLaunch(process.env, process.platform)) {
       applicationRollbackVisible = false
       disposeCloudIdentityIpc?.()
       disposeCloudIdentityIpc = undefined
+      disposeCloudBusinessIpc?.()
+      disposeCloudBusinessIpc = undefined
       cloudIdentityService?.dispose()
       cloudIdentityService = undefined
+      void cloudHostBroker?.stop()
+      cloudHostBroker = undefined
     })
     app.on('before-quit', (event) => {
       desktopDiagnostics?.markCleanExit()
@@ -4059,7 +4095,7 @@ if (isDaemonLaunch(process.env, process.platform)) {
       tray = undefined
       repairAgentService?.dispose()
       repairAgentService = undefined
-      void Promise.all([runtime.stop(), mobileBridge?.stop()]).finally(() => app.quit())
+      void Promise.all([runtime.stop(), mobileBridge?.stop(), cloudHostBroker?.stop()]).finally(() => app.quit())
     })
   }
 }

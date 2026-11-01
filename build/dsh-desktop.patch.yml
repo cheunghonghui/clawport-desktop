@@ -31,6 +31,11 @@
     - id: dsh-desktop-client-ui
       name: dsh-desktop-client-ui
 
+    # ClawPort business surfaces are supplied as a fixed private artifact at
+    # product assembly time. Safe Mode uses its own patch and omits this row.
+    - id: clawport-projects
+      name: '@clawport/dsh-projects'
+
     - id: dsh-desktop-workbenches
       name: dsh-desktop-workbenches
       config:

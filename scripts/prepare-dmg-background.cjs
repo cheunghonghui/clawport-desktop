@@ -1,6 +1,7 @@
 const { execFileSync } = require('node:child_process')
 const { mkdirSync } = require('node:fs')
 const path = require('node:path')
+const { pathToFileURL } = require('node:url')
 
 const root = path.resolve(__dirname, '..')
 
@@ -25,6 +26,10 @@ function prepareDmgBackground() {
 
 // beforePack runs for both release and development macOS packaging.
 module.exports = async context => {
+  const { verifyStagedClawPortPlugin } = await import(
+    pathToFileURL(path.join(__dirname, 'stage-clawport-plugin.mjs')).href
+  )
+  await verifyStagedClawPortPlugin()
   if (context.electronPlatformName === 'darwin') prepareDmgBackground()
 }
 

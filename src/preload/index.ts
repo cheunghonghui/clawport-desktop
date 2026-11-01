@@ -11,6 +11,7 @@ import { markWindowsTitlebar, mountWindowsTitlebarLayout } from './windows-title
 import { mountMacosWindowChrome } from './macos-window-chrome'
 import { createHostPathsBridge, HOST_PATHS_BRIDGE } from './host-paths'
 import { createCloudIdentityBridge } from './cloud-identity'
+import { createCloudBusinessBridge } from './cloud-business'
 
 if (process.platform === 'darwin') {
   const dispose = mountMacosWindowChrome(document, listener => {
@@ -499,6 +500,7 @@ contextBridge.exposeInMainWorld(
   'dshDesktop',
   Object.freeze({
     ...createCloudIdentityBridge(ipcRenderer),
+    ...createCloudBusinessBridge(ipcRenderer),
     openMobilePairing: (): Promise<void> => ipcRenderer.invoke('mobile:open-pairing'),
     getMobileStatus: (): Promise<{ connected?: boolean }> => ipcRenderer.invoke('mobile:status'),
     onMobileStatus: (listener: (status: { connected: boolean }) => void): (() => void) => {

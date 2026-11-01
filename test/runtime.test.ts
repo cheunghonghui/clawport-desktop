@@ -272,6 +272,19 @@ describe('Harness launch contract', () => {
     expect(web.env).not.toHaveProperty('DSH_DESKTOP_HOST_RESOLVED')
   })
 
+  it('passes a per-launch ClawPort capability only to the normal Profile', () => {
+    const bridge = {
+      CLAWPORT_DESKTOP_BRIDGE_ORIGIN: 'http://127.0.0.1:43210',
+      CLAWPORT_DESKTOP_BRIDGE_TOKEN: 'local-capability'
+    }
+    const normal = buildHarnessSpawnOptions('/launch-root', '/harness', 'darwin', { PATH: '/usr/bin' }, 'web', {}, bridge)
+    expect(normal.env).toMatchObject(bridge)
+
+    const safe = buildHarnessSpawnOptions('/launch-root', '/harness', 'darwin', { PATH: '/usr/bin' }, SAFE_MODE_PROFILE, {}, bridge)
+    expect(safe.env).not.toHaveProperty('CLAWPORT_DESKTOP_BRIDGE_ORIGIN')
+    expect(safe.env).not.toHaveProperty('CLAWPORT_DESKTOP_BRIDGE_TOKEN')
+  })
+
   it('does not detach the Harness on macOS or Linux', () => {
     // `detached: true` is a Windows-only escape hatch. The macOS path uses
     // Electron's UtilityProcess fork, and Linux spawns are unaffected by

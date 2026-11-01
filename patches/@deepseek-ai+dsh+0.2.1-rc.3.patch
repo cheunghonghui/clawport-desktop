@@ -18,13 +18,14 @@ diff --git a/node_modules/@deepseek-ai/dsh/package.json b/node_modules/@deepseek
 index a9b4aea6db..d76548a1ca 100644
 --- a/node_modules/@deepseek-ai/dsh/package.json
 +++ b/node_modules/@deepseek-ai/dsh/package.json
-@@ -105,7 +105,19 @@
+@@ -105,7 +105,20 @@
      "@deepseek-ai/dsh-experimental-terminal-bundle": "0.2.1-rc.3",
      "@deepseek-ai/dsh-experimental-session-search": "0.2.1-rc.3",
      "@deepseek-ai/dsh-experimental-tool-worktree": "0.2.1-rc.3",
 -    "@deepseek-ai/dsh-experimental-plugin-market-bundle": "0.2.1-rc.3"
 +    "@deepseek-ai/dsh-experimental-plugin-market-bundle": "0.2.1-rc.3",
 +    "@deepseek-ai/dsh-deepseek-account": "0.2.1-rc.3",
++    "@clawport/dsh-projects": "0.2.0",
 +    "dsh-ppt-composer": "0.1.1-rc.2",
 +    "dsh-desktop-client-ui": "0.1.0",
 +    "dsh-desktop-hmr-fallback": "0.1.0",

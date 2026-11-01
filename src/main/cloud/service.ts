@@ -1,6 +1,7 @@
 import type { CloudIdentitySnapshot, TokenSet } from '../../shared/cloud-identity'
 import { CloudApiError, type CloudApi } from './api-client'
 import { CloudVaultError } from './vault'
+import type { CloudBusinessCredential } from './business-client'
 
 const REFRESH_EARLY_MS = 60_000
 const OFFLINE_RETRY_MS = 30_000
@@ -42,6 +43,8 @@ export class CloudIdentityService {
   private timer?: unknown
   private pendingDelayResolve?: (active: boolean) => void
   private generation = 0
+  private revocationGeneration = 0
+  private businessEpoch = 0
   private disposed = false
   private readonly listeners = new Set<(snapshot: CloudIdentitySnapshot) => void>()
   private readonly schedule: NonNullable<CloudIdentityServiceOptions['schedule']>
@@ -72,6 +75,16 @@ export class CloudIdentityService {
   subscribe(listener: (snapshot: CloudIdentitySnapshot) => void): () => void {
     this.listeners.add(listener)
     return () => this.listeners.delete(listener)
+  }
+
+  businessCredential(): CloudBusinessCredential | undefined {
+    if (!this.accessToken || !this.state.runtime) return undefined
+    return { accessToken: this.accessToken, runtimeId: this.state.runtime.id, epoch: this.businessEpoch }
+  }
+
+  isBusinessCredentialCurrent(credential: CloudBusinessCredential): boolean {
+    return this.accessToken !== undefined && credential.epoch === this.businessEpoch &&
+      credential.runtimeId === this.state.runtime?.id
   }
 
   private update(patch: Omit<Partial<CloudIdentitySnapshot>, 'revision'>): CloudIdentitySnapshot {
@@ -105,7 +118,17 @@ export class CloudIdentityService {
     this.timer = this.schedule(() => { this.timer = undefined; void this.refresh() }, OFFLINE_RETRY_MS)
   }
 
+  private updateWithIdentity(patch: Omit<Partial<CloudIdentitySnapshot>, 'revision'>): CloudIdentitySnapshot {
+    const { identity, workspace, device, runtime, accessExpiresAt } = this.state
+    return this.update({ identity, workspace, device, runtime, accessExpiresAt, ...patch })
+  }
+
   private connected(tokens: TokenSet): CloudIdentitySnapshot {
+    const previousOwner = this.state.identity && this.state.runtime
+      ? `${this.state.identity.memberId}:${this.state.runtime.id}`
+      : undefined
+    const nextOwner = `${tokens.bootstrap.identity.memberId}:${tokens.bootstrap.runtime.id}`
+    if (previousOwner !== nextOwner) this.businessEpoch += 1
     this.accessToken = tokens.accessToken
     this.scheduleRefresh(tokens.expiresInSeconds)
     const { identity, workspace, device, runtime, session } = tokens.bootstrap
@@ -120,7 +143,10 @@ export class CloudIdentityService {
     if (this.revokeFlow) return this.revokeFlow
     if (!this.options.vault.secureStorageAvailable()) return Promise.resolve(this.snapshot())
     const generation = ++this.generation
+    this.businessEpoch += 1
+    this.accessToken = undefined
     this.cancelTimer()
+    this.update({ phase: 'authorizing' })
     this.loginFlow = this.runLogin(generation).finally(() => { this.loginFlow = undefined })
     return this.loginFlow
   }
@@ -192,18 +218,22 @@ export class CloudIdentityService {
     if (this.refreshFlow) return this.refreshFlow
     if (!this.options.vault.secureStorageAvailable()) return Promise.resolve(this.snapshot())
     const generation = this.generation
-    this.refreshFlow = this.runRefresh(generation).finally(() => { this.refreshFlow = undefined })
+    const revocationGeneration = this.revocationGeneration
+    this.refreshFlow = this.runRefresh(generation, revocationGeneration).finally(() => { this.refreshFlow = undefined })
     return this.refreshFlow
   }
 
-  private async runRefresh(generation: number): Promise<CloudIdentitySnapshot> {
+  private async runRefresh(
+    generation: number,
+    revocationGeneration = this.revocationGeneration
+  ): Promise<CloudIdentitySnapshot> {
     this.cancelTimer()
     let revocationPending = false
     try {
       const credential = await this.options.vault.load()
       if (!credential) return this.update({ phase: 'signedOut' })
       revocationPending = credential.revocationPending
-      this.update({ phase: 'refreshing' })
+      this.updateWithIdentity({ phase: 'refreshing' })
       const tokens = await this.options.api.refresh(credential.refreshToken)
       if (generation !== this.generation || this.disposed) return this.snapshot()
       const write = this.options.vault.saveRefreshToken(tokens.refreshToken)
@@ -216,7 +246,7 @@ export class CloudIdentityService {
       if (generation !== this.generation || this.disposed) return this.snapshot()
       this.accessToken = tokens.accessToken
       const persisted = await this.options.vault.load()
-      if (revocationPending || persisted?.revocationPending) {
+      if (revocationGeneration !== this.revocationGeneration || revocationPending || persisted?.revocationPending) {
         return await this.completeRevocation(tokens.accessToken, false)
       }
       return this.connected(tokens)
@@ -232,7 +262,7 @@ export class CloudIdentityService {
       }
       if (safe.code === 'offline') {
         this.scheduleRetry()
-        return this.update({
+        return this.updateWithIdentity({
           phase: 'offline',
           error: revocationPending
             ? { code: 'logout_pending', message: 'Cloud logout is pending and will retry when ClawPort is available.' }
@@ -245,21 +275,25 @@ export class CloudIdentityService {
 
   revoke(): Promise<CloudIdentitySnapshot> {
     if (this.revokeFlow) return this.revokeFlow
-    this.revokeFlow = this.runRevoke().finally(() => { this.revokeFlow = undefined })
+    const refreshFlow = this.refreshFlow
+    this.revocationGeneration += 1
+    this.revokeFlow = this.runRevoke(refreshFlow).finally(() => { this.revokeFlow = undefined })
     return this.revokeFlow
   }
 
-  private async runRevoke(): Promise<CloudIdentitySnapshot> {
+  private async runRevoke(refreshFlow?: Promise<CloudIdentitySnapshot>): Promise<CloudIdentitySnapshot> {
     this.cancelTimer()
+    this.businessEpoch += 1
+    this.update({ phase: 'signedOut' })
     if (this.loginFlow) {
       ++this.generation
       const write = this.credentialWrite
       if (write) await write.catch(() => undefined)
     }
-    if (this.refreshFlow) {
+    if (refreshFlow) {
       const rotating = await this.options.vault.load()
       if (rotating) await this.options.vault.markRevocationPending()
-      await this.refreshFlow
+      await refreshFlow
     }
     const credential = await this.options.vault.load()
     if (!credential) {
@@ -268,7 +302,6 @@ export class CloudIdentityService {
     }
     await this.options.vault.markRevocationPending()
     const accessToken = this.accessToken
-    this.accessToken = undefined
     if (!accessToken) return this.runRefresh(this.generation)
     return this.completeRevocation(accessToken)
   }

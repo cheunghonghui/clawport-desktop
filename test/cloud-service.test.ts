@@ -69,6 +69,52 @@ describe('CloudIdentityService', () => {
     expect(f.service.snapshot()).toMatchObject({ phase: 'connected', identity: bootstrap.identity })
   })
 
+  it('keeps the business credential main-only and invalidates it on logout', async () => {
+    const f = fixture({}, { refreshToken: 'refresh-1', revocationPending: false })
+    await f.service.refresh()
+    const first = f.service.businessCredential()
+    expect(first).toMatchObject({ accessToken: 'access-2', runtimeId: 'runtime-1' })
+    expect(JSON.stringify(f.service.snapshot())).not.toContain('access-2')
+
+    await f.service.refresh()
+    const rotated = f.service.businessCredential()
+    expect(rotated?.epoch).toBe(first?.epoch)
+    expect(first && f.service.isBusinessCredentialCurrent(first)).toBe(true)
+
+    const logout = f.service.revoke()
+    expect(first && f.service.isBusinessCredentialCurrent(first)).toBe(false)
+    await logout
+    expect(f.service.businessCredential()).toBeUndefined()
+  })
+
+  it('keeps the connected runtime visible during a normal refresh and offline retry', async () => {
+    let finishRefresh!: (value: TokenSet) => void
+    const refresh = vi.fn()
+      .mockResolvedValueOnce(tokens('1'))
+      .mockImplementationOnce(() => new Promise<TokenSet>(resolve => { finishRefresh = resolve }))
+      .mockRejectedValueOnce(new CloudApiError('offline', 'ClawPort is unavailable.'))
+    const f = fixture({ refresh }, { refreshToken: 'refresh-0', revocationPending: false })
+    await f.service.refresh()
+
+    const rotating = f.service.refresh()
+    await vi.waitFor(() => expect(f.service.snapshot().phase).toBe('refreshing'))
+    expect(f.service.snapshot()).toMatchObject({ identity: bootstrap.identity, runtime: bootstrap.runtime })
+    finishRefresh(tokens('2'))
+    await rotating
+
+    await f.service.refresh()
+    expect(f.service.snapshot()).toMatchObject({ phase: 'offline', identity: bootstrap.identity, runtime: bootstrap.runtime })
+  })
+
+  it('clears the old public runtime as soon as account switching starts', async () => {
+    const f = fixture({}, { refreshToken: 'refresh-0', revocationPending: false })
+    await f.service.refresh()
+    const switching = f.service.startLogin()
+    expect(f.service.snapshot()).toMatchObject({ phase: 'authorizing' })
+    expect(f.service.snapshot().runtime).toBeUndefined()
+    await switching
+  })
+
   it('completes a persisted pending logout before allowing a new authorization', async () => {
     const f = fixture({}, { refreshToken: 'refresh-1', revocationPending: true })
 
@@ -181,6 +227,39 @@ describe('CloudIdentityService', () => {
     await expect(logout).resolves.toMatchObject({ phase: 'signedOut' })
     expect(f.api.revoke).toHaveBeenCalledWith('access-2')
     expect(f.vault.clear).toHaveBeenCalledOnce()
+  })
+
+  it('keeps logout fenced when refresh completes before revocation is persisted', async () => {
+    let resolveRefresh!: (value: TokenSet) => void
+    let resolveLogoutLoad!: () => void
+    let resolveRevoke!: () => void
+    const refresh = vi.fn(() => new Promise<TokenSet>(resolve => { resolveRefresh = resolve }))
+    const revoke = vi.fn(() => new Promise<void>(resolve => { resolveRevoke = resolve }))
+    const f = fixture({ refresh, revoke }, { refreshToken: 'refresh-1', revocationPending: false })
+    const load = f.vault.load
+    let loadCount = 0
+    f.vault.load = vi.fn(() => {
+      loadCount += 1
+      if (loadCount !== 2) return load()
+      return new Promise<Awaited<ReturnType<CloudIdentityVault['load']>>>(resolve => {
+        resolveLogoutLoad = () => { void load().then(resolve) }
+      })
+    })
+
+    const refreshing = f.service.refresh()
+    await vi.waitFor(() => expect(refresh).toHaveBeenCalledOnce())
+    const logout = f.service.revoke()
+    await vi.waitFor(() => expect(f.vault.load).toHaveBeenCalledTimes(2))
+
+    resolveRefresh(tokens('2'))
+    await vi.waitFor(() => expect(revoke).toHaveBeenCalledWith('access-2'))
+    expect(f.service.snapshot().phase).toBe('signedOut')
+    expect(f.service.businessCredential()).toBeUndefined()
+
+    resolveLogoutLoad()
+    resolveRevoke()
+    await refreshing
+    await expect(logout).resolves.toMatchObject({ phase: 'signedOut' })
   })
 
   it('finishes revoking a token persisted while login cancellation was in progress', async () => {

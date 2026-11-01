@@ -43,6 +43,8 @@ export interface HarnessRuntimeOptions {
   pnpmRunnerPath?: string
   /** Windows console-hide bootstrap passed to the Harness as an absolute path. */
   hideConsoleBootstrapPath?: string
+  /** Per-process local capabilities passed only to the normal Profile. */
+  launchEnvironment?(profile: string): NodeJS.ProcessEnv
   onChanged(snapshot: RuntimeSnapshot): void
 }
 
@@ -314,7 +316,8 @@ export function buildHarnessSpawnOptions(
   platform: NodeJS.Platform = process.platform,
   environment: NodeJS.ProcessEnv = process.env,
   profile: string = 'web',
-  packagedPnpm: PackagedPnpmLaunchPaths = {}
+  packagedPnpm: PackagedPnpmLaunchPaths = {},
+  launchEnvironment: NodeJS.ProcessEnv = {}
 ): SpawnOptionsWithoutStdio {
   const {
     ELECTRON_RUN_AS_NODE: _runAsNode,
@@ -377,6 +380,7 @@ export function buildHarnessSpawnOptions(
       ...(platform === 'win32' && packagedPnpm.hideConsoleBootstrapPath
         ? { DSH_DESKTOP_HIDE_CONSOLE_BOOTSTRAP: packagedPnpm.hideConsoleBootstrapPath }
         : {}),
+      ...(profile === SAFE_MODE_PROFILE ? {} : launchEnvironment),
       NODE_COMPILE_CACHE: environment.NODE_COMPILE_CACHE ?? pathApi.join(dshHome, 'cache', 'compile-cache'),
       [pathKey]: resolveEnvironmentPath(environment, platform)
     },
@@ -618,7 +622,8 @@ export class HarnessRuntime {
             entryPath: this.options.pnpmEntryPath,
             runnerPath: this.options.pnpmRunnerPath,
             hideConsoleBootstrapPath: this.options.hideConsoleBootstrapPath
-          }
+          },
+          this.options.launchEnvironment?.(profile)
         )
       )
     } catch (error) {
