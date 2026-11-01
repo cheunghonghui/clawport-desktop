@@ -1,4 +1,4 @@
-# DSH Desktop development guide
+# ClawPort Desktop development guide
 
 This guide covers local development, validation, patch maintenance, and target-native packaging. For the runtime design, see [Architecture](architecture.md). For formal releases, see the [release runbook](release-runbook.md).
 
@@ -13,23 +13,23 @@ This baseline pins `@deepseek-ai/dsh@0.2.1-rc.3`. Windows packages run Harness i
 ## Local setup
 
 ```bash
-git clone https://github.com/dataelement/dsh-desktop.git
-cd dsh-desktop
+git clone https://github.com/cheunghonghui/clawport-desktop.git
+cd clawport-desktop
 npm ci
 npm run dev
 ```
 
 `npm ci` runs the repository's `postinstall` hook. It reapplies the tracked `patch-package` patches, installs DSH brand assets into the pinned Harness frontend, and installs Electron.
 
-Development builds use the separate application name `DSH Desktop Dev` and the separate user-data directory `dsh-desktop-dev`, so they do not reuse production DSH Desktop data. Multiple development worktrees still share that development profile by default; avoid running them at the same time when testing profile, plugin, migration, or recovery changes.
+Development builds use `ClawPort Dev` and user-data directory `clawport-desktop-dev`; production uses `ClawPort` and `clawport-desktop`. Both are separate from existing DSH Desktop data. Multiple development worktrees still share that development profile by default; avoid running them at the same time when testing profile, plugin, migration, or recovery changes.
 
 To run another worktree concurrently, set a distinct `DSH_DEV_PROFILE` directory name and unused loopback ports using `DSH_DEV_HARNESS_PORT` and `DSH_DEV_MOBILE_PORT`. For example, on macOS:
 
 ```bash
-DSH_DEV_PROFILE=dsh-desktop-dev-workbench DSH_DEV_HARNESS_PORT=43132 DSH_DEV_MOBILE_PORT=43133 npm run dev
+DSH_DEV_PROFILE=clawport-desktop-dev-workbench DSH_DEV_HARNESS_PORT=44132 DSH_DEV_MOBILE_PORT=44133 npm run dev
 ```
 
-On PowerShell, set the same names through `$env:DSH_DEV_PROFILE`, `$env:DSH_DEV_HARNESS_PORT` and `$env:DSH_DEV_MOBILE_PORT` before `npm run dev`. The profile must be a directory name, separate from `dsh-desktop`; ports must be distinct integers from 1024 to 65535. These overrides are ignored by production builds. Defaults remain `dsh-desktop-dev`, Harness port 43130 and mobile port 43128.
+On PowerShell, set the same names through `$env:DSH_DEV_PROFILE`, `$env:DSH_DEV_HARNESS_PORT` and `$env:DSH_DEV_MOBILE_PORT` before `npm run dev`. The profile must be a directory name, separate from `clawport-desktop`, `dsh-desktop`, and `dsh-desktop-dev`; ports must be distinct integers from 1024 to 65535. These overrides are ignored by production builds. Defaults are `clawport-desktop-dev`, preferred Harness port 44130 and mobile port 44128. ClawPort updates and upstream desktop telemetry are disabled until ClawPort has its own release service.
 
 ## Workbench package lifecycle
 
@@ -57,10 +57,12 @@ identity support; registration and a mounted panel are separate acceptance stage
 Run the core checks before submitting a change:
 
 ```bash
-npm test
+npm test -- --maxWorkers=2
 npm run typecheck
 npm run build
 ```
+
+Local full-suite runs use two workers to limit the number of concurrent Harness and document-rendering subprocesses. Python-based release tests require Python 3.11 or later; the prepared Office runtime includes Python 3.12. Keep loopback addresses outside any download proxy when running integration tests.
 
 Static checks are not a substitute for runtime verification. Changes that affect startup, profiles, plugins, native dialogs, updates, mobile access, or packaging should also be exercised through the corresponding real application flow.
 

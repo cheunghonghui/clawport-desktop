@@ -61,6 +61,7 @@ concurrency:
 jobs:
   validate-dispatch:
     name: Validate dispatch inputs
+    if: github.repository == 'dataelement/dsh-desktop'
     runs-on: ubuntu-24.04
     steps:
       - name: Validate workflow_dispatch inputs
@@ -130,6 +131,7 @@ jobs:
     name: macOS ${{ matrix.label }}
     needs: validate-dispatch
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       inputs.mode != 'publish' && (startsWith(github.ref, 'refs/tags/v') ||
       (github.event_name == 'workflow_dispatch' && (inputs.target == 'all' || inputs.target == 'macos')))
     strategy:
@@ -348,6 +350,7 @@ jobs:
     name: Windows x64
     needs: validate-dispatch
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       inputs.mode != 'publish' && (startsWith(github.ref, 'refs/tags/v') ||
       github.event_name == 'pull_request' ||
       (github.event_name == 'workflow_dispatch' &&
@@ -648,6 +651,7 @@ jobs:
       actions: read
       contents: read
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       always() &&
       needs.validate-dispatch.result == 'success' && inputs.mode != 'publish' &&
       ((startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && (inputs.mode == 'signed' || inputs.mode == 'prerelease'))) && needs.windows-x64.result == 'success' ||
@@ -819,6 +823,7 @@ jobs:
     name: Upload signed test installers and notify
     needs: [macos, sign-windows]
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       always() && github.event_name == 'workflow_dispatch' && inputs.mode == 'signed' &&
       (inputs.target == 'windows' || needs.macos.result == 'success') &&
       (inputs.target == 'macos' || needs.sign-windows.result == 'success')
@@ -872,6 +877,7 @@ jobs:
       group: desktop-modelscope-release-history
       cancel-in-progress: false
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       always() && needs.validate-dispatch.result == 'success' &&
       ((github.event_name == 'workflow_dispatch' && inputs.mode == 'publish') ||
        (inputs.mode != 'publish' && startsWith(github.ref, 'refs/tags/v') &&
@@ -1156,6 +1162,7 @@ jobs:
   publish-prerelease:
     name: Publish GitHub Pre-release
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       always() &&
       github.event_name == 'workflow_dispatch' &&
       inputs.mode == 'prerelease' &&

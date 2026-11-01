@@ -22,6 +22,7 @@ concurrency:
 
 jobs:
   backfill:
+    if: github.repository == 'dataelement/dsh-desktop'
     concurrency:
       group: desktop-modelscope-release-history
       cancel-in-progress: false

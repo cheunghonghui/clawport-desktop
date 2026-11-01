@@ -1,5 +1,6 @@
 import type { MenuItemConstructorOptions } from 'electron'
 import { formatZoomPercentage, type DesktopMenuCommand } from '../shared/desktop-menu'
+import { PRODUCT_UPDATES_ENABLED } from './product-config'
 
 /**
  * The two caption menus the Windows page shows beside the sidebar toggle, in
@@ -105,8 +106,8 @@ export function windowsMenuTemplate(
       ]
     },
     { type: 'separator' },
-    command('check-for-updates', '检查更新…', 'Check for Updates…', 'Ctrl+U'),
-    command('about', '关于 DSH Desktop', 'About DSH Desktop'),
+    ...(PRODUCT_UPDATES_ENABLED ? [command('check-for-updates', '检查更新…', 'Check for Updates…', 'Ctrl+U')] : []),
+    command('about', '关于 ClawPort', 'About ClawPort'),
     { type: 'separator' },
     command('quit', '退出', 'Exit')
   ]

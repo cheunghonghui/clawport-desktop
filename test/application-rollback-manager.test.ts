@@ -10,6 +10,7 @@ vi.mock('electron', () => ({ app: { isPackaged: true, getVersion: () => '0.13.0'
   BrowserWindow: { getAllWindows: () => [] }, powerMonitor: { on: vi.fn(), removeListener: vi.fn() }, ipcMain: { handle: vi.fn() } }))
 vi.mock('electron-updater', () => ({ default: { autoUpdater: mocks.updater } }))
 vi.mock('../src/main/desktop-service', () => ({ checkDesktopUpdate: vi.fn() }))
+vi.mock('../src/main/product-config', () => ({ PRODUCT_UPDATES_ENABLED: true }))
 vi.mock('../src/main/update/version-catalog', async original => ({ ...await original<object>(), fetchAvailableReleases: mocks.catalog }))
 let manager: typeof import('../src/main/update/update-manager')
 beforeEach(async () => {

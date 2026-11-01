@@ -9,7 +9,7 @@ const { jobs } = workflow
 // Exercise the actual expressions rather than duplicating dispatch logic in tests.
 function enabled(expression, { event = 'workflow_dispatch', ref = 'refs/heads/test', arch = 'arm64', ...inputs } = {}) {
   return runInNewContext(expression ?? 'true', {
-    github: { event_name: event, ref },
+    github: { repository: 'dataelement/dsh-desktop', event_name: event, ref },
     matrix: { arch },
     inputs: { mode: 'development', target: 'all', ...inputs },
     startsWith: (value, prefix) => value.startsWith(prefix),

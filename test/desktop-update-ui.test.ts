@@ -216,4 +216,13 @@ describe('desktop update presentation at the IPC boundary', () => {
     confirm.click()
     expect(document.activeElement?.id).toBe('origin')
   })
+
+  it('shows ClawPort About without a version selector when updates are unavailable', async () => {
+    const ui = await mount(Promise.resolve(status('unsupported', { manual: false })))
+    ui.showAbout()
+    expect(ui.aboutShadow.querySelector('.about-title')?.textContent).toBe('ClawPort')
+    expect(ui.aboutShadow.querySelector('.version-switch')).toBeNull()
+    expect(ui.aboutShadow.querySelector('.confirm')).not.toBeNull()
+    expect(ipc.invoke).not.toHaveBeenCalledWith('updates:list-versions')
+  })
 })

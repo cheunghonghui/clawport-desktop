@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('../src/main/update/version-catalog', async importOriginal => ({ ...await importOriginal<object>(), fetchAvailableReleases: mocks.catalog }))
 vi.mock('../src/main/update/skipped-version', async importOriginal => ({ ...await importOriginal<object>(), readSkippedVersion: mocks.skipped }))
 vi.mock('../src/main/desktop-service', () => ({ checkDesktopUpdate: mocks.policy }))
+vi.mock('../src/main/product-config', () => ({ PRODUCT_UPDATES_ENABLED: true }))
 vi.mock('electron-updater', () => ({ default: { autoUpdater: mocks.updater } }))
 vi.mock('electron', () => ({ app: { isPackaged: true, getVersion: () => '0.8.0', getPath: () => '/nonexistent-desktop-test', isReady: () => true }, BrowserWindow: { getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: mocks.send } }] }, powerMonitor: { on: vi.fn(), removeListener: vi.fn() }, ipcMain: { handle: vi.fn() } }))
 vi.mock('../src/main/update/update-policy', async importOriginal => ({ ...await importOriginal<object>(), supportsAutoUpdates: () => true }))

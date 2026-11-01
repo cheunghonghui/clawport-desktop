@@ -195,7 +195,7 @@ describe('GitHub release contract', () => {
       'utf8'
     )
 
-    expect(packageJson.build.artifactName).toBe('dsh-desktop-${os}-${arch}.${ext}')
+    expect(packageJson.build.artifactName).toBe('clawport-desktop-${os}-${arch}.${ext}')
     expect(packageJson.build.asar).toBe(true)
     // JavaScript stays in app.asar; only files the OS loads or executes unpack.
     expect(packageJson.build.asarUnpack).not.toContain('node_modules/**/*')
@@ -271,7 +271,7 @@ describe('GitHub release contract', () => {
       to: 'web-import.html'
     })
     expect(packageJson.build.nsis.artifactName).toBe(
-      'dsh-desktop-windows-${arch}-setup.${ext}'
+      'clawport-desktop-windows-${arch}-setup.${ext}'
     )
     expect(packageJson.build.nsis.include).toBe('build/installer.nsh')
     expect(packageJson.build.win.target).toEqual([{ target: 'nsis', arch: ['x64'] }])
@@ -290,14 +290,14 @@ describe('GitHub release contract', () => {
     expect(packageJson.build.detectUpdateChannel).toBe(false)
   })
 
-  it('publishes update metadata for installed desktop builds', async () => {
+  it('keeps ClawPort distribution separate from upstream publishing', async () => {
     const packageJson = JSON.parse(
       await readFile(path.join(projectRoot, 'package.json'), 'utf8')
     ) as {
       dependencies: Record<string, string>
       build: {
-        publish: Array<{ provider: string; url?: string; owner?: string; repo?: string }>
-        win: { verifyUpdateCodeSignature: boolean; signtoolOptions: { publisherName: string } }
+        publish: null
+        win: { verifyUpdateCodeSignature: boolean; signtoolOptions: { publisherName?: string } }
       }
     }
     const workflow = await readFile(
@@ -306,11 +306,9 @@ describe('GitHub release contract', () => {
     )
 
     expect(packageJson.dependencies['electron-updater']).toBeTruthy()
-    expect(packageJson.build.publish).toEqual([
-      { provider: 'generic', url: 'https://dshdesktop.com/updates/latest/' }
-    ])
+    expect(packageJson.build.publish).toBeNull()
     expect(packageJson.build.win.verifyUpdateCodeSignature).toBe(true)
-    expect(packageJson.build.win.signtoolOptions.publisherName).toBe('Beijing Shuju Xiangsu Intelligence Technology Co., Ltd.')
+    expect(packageJson.build.win.signtoolOptions.publisherName).toBeUndefined()
     for (const asset of [
       'latest-mac-arm64.yml',
       'latest-mac-x64.yml',
@@ -364,7 +362,7 @@ describe('GitHub release contract', () => {
       appId: string
       productName: string
       directories: { output: string }
-      extraMetadata: { dshDesktopChannel: string }
+      extraMetadata: { clawportDesktopChannel: string }
       artifactName: string
       nsis: { artifactName: string }
     }
@@ -378,12 +376,12 @@ describe('GitHub release contract', () => {
     expect(packageJson.scripts['package:dev:win']).toContain('verify-target.mjs win32 x64')
     expect(packageJson.scripts['package:dev:win']).toContain('electron-builder.dev.cjs')
     expect(packageJson.scripts['package:dev:win']).toContain('--publish never')
-    expect(developmentConfig.appId).toBe('io.dsh.desktop.dev')
-    expect(developmentConfig.productName).toBe('DSH Desktop Dev')
+    expect(developmentConfig.appId).toBe('com.clawport.desktop.dev')
+    expect(developmentConfig.productName).toBe('ClawPort Dev')
     expect(developmentConfig.directories.output).toBe('dist-dev')
-    expect(developmentConfig.extraMetadata.dshDesktopChannel).toBe('development')
-    expect(developmentConfig.artifactName).toBe('dsh-desktop-dev-${os}-${arch}.${ext}')
-    expect(developmentConfig.nsis.artifactName).toBe('dsh-desktop-dev-windows-${arch}-setup.${ext}')
+    expect(developmentConfig.extraMetadata.clawportDesktopChannel).toBe('development')
+    expect(developmentConfig.artifactName).toBe('clawport-desktop-dev-${os}-${arch}.${ext}')
+    expect(developmentConfig.nsis.artifactName).toBe('clawport-desktop-dev-windows-${arch}-setup.${ext}')
   })
 
   it('builds and publishes every supported platform', async () => {

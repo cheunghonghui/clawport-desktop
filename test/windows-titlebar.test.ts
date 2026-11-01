@@ -40,11 +40,12 @@ describe('Windows caption menus', () => {
     expect(isDesktopMenuCommand({ command: 'quit' })).toBe(false)
   })
 
-  it('keeps every Desktop command in the application menu, including the View group', () => {
+  it('keeps supported Desktop commands and omits unavailable product updates', () => {
     const { run, actions } = record()
     clickAll(windowsMenuTemplate('application', 'zh', 1, actions))
     const editing = new Set<DesktopMenuCommand>(['undo', 'redo', 'cut', 'copy', 'paste', 'select-all'])
-    expect(new Set(run)).toEqual(new Set(desktopMenuCommands.filter((command) => !editing.has(command))))
+    expect(new Set(run)).toEqual(new Set(desktopMenuCommands.filter((command) => !editing.has(command) && command !== 'check-for-updates')))
+    expect(labels(windowsMenuTemplate('application', 'en', 1, actions))).not.toContain('Check for Updates…')
   })
 
   it('sends editing shortcuts as key events so editor-owned history receives them', () => {

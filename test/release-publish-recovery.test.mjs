@@ -9,7 +9,7 @@ const { jobs } = workflow
 function enabled(job, inputs = {}, results = {}, ref = 'refs/heads/main', event = 'workflow_dispatch') {
   const expression = jobs[job].if.replace(/needs[.]([a-z0-9]+(?:-[a-z0-9]+)+)/g, (_, name) => `needs['${name}']`)
   return runInNewContext(expression, {
-    github: { event_name: event, ref },
+    github: { repository: 'dataelement/dsh-desktop', event_name: event, ref },
     inputs: { mode: 'development', target: 'all', version: '', ...inputs },
     needs: Object.fromEntries(['validate-dispatch', 'macos', 'windows-x64', 'sign-windows'].map(name =>
       [name, { result: results[name] ?? 'success' }])),

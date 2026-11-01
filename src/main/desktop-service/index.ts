@@ -5,6 +5,7 @@ import { app, dialog, net } from 'electron'
 import { join } from 'node:path'
 import { DesktopService } from './service'
 import { attachDiagnostics } from './diagnostics'
+import { PRODUCT_UPDATES_ENABLED } from '../product-config'
 
 let gpuInfo = 'not-yet-available'
 let service: DesktopService | undefined
@@ -12,7 +13,7 @@ export let desktopDiagnostics: ReturnType<typeof attachDiagnostics> | undefined
 
 /** Call only after the single-instance lock, before bootstrap writes this session's log. */
 export function initializeDesktopService(options: { getExitContext?: () => GpuExitContext } = {}): void {
-  if (!app.isPackaged || service) return
+  if (!PRODUCT_UPDATES_ENABLED || !app.isPackaged || service) return
   try {
     service = new DesktopService({
       stateDir: join(app.getPath('userData'), 'desktop-service'),

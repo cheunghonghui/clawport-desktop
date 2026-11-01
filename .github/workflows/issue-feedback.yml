@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   follow-up:
-    if: github.event_name != 'issue_comment'
+    if: github.repository == 'dataelement/dsh-desktop' && github.event_name != 'issue_comment'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/stale@1e223db275d687790206a7acac4d1a11bd6fe629 # v10
@@ -50,6 +50,7 @@ jobs:
 
   feedback-received:
     if: >-
+      github.repository == 'dataelement/dsh-desktop' &&
       github.event_name == 'issue_comment' &&
       !github.event.issue.pull_request &&
       github.event.comment.user.type == 'User'

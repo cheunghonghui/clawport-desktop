@@ -1,3 +1,11 @@
+# ClawPort Desktop
+
+基于 [DSH Desktop](https://github.com/dataelement/dsh-desktop) 的 ClawPort 开发分支：本地运行 DSH Agent 和原生 Web 界面，云端承载 ClawPort 业务服务。当前里程碑建立独立应用身份、数据目录和发行配置；云端登录及业务插件待接入，尚无客户安装包。
+
+参见[产品设计](docs/superpowers/specs/2026-11-01-clawport-desktop-design.md)和[开发计划](docs/superpowers/plans/2026-11-01-clawport-desktop-foundation.md)。以下保留上游产品说明，其中的下载地址、签名状态和服务属于 Dataelem。
+
+---
+
 <h1 align="center">
   <img src="docs/images/readme-logo-black-rounded.svg" width="64" alt="DSH Desktop Logo" valign="middle" />
   DSH Desktop

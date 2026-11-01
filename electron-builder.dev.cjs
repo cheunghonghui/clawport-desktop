@@ -2,21 +2,21 @@ const packageJson = require('./package.json')
 
 module.exports = {
   ...packageJson.build,
-  appId: 'io.dsh.desktop.dev',
-  productName: 'DSH Desktop Dev',
+  appId: 'com.clawport.desktop.dev',
+  productName: 'ClawPort Dev',
   directories: {
     ...packageJson.build.directories,
     output: 'dist-dev'
   },
   extraMetadata: {
-    name: 'dsh-desktop-dev',
-    productName: 'DSH Desktop Dev',
-    dshDesktopChannel: 'development'
+    name: 'clawport-desktop-dev',
+    productName: 'ClawPort Dev',
+    clawportDesktopChannel: 'development'
   },
-  artifactName: 'dsh-desktop-dev-${os}-${arch}.${ext}',
+  artifactName: 'clawport-desktop-dev-${os}-${arch}.${ext}',
   nsis: {
     ...packageJson.build.nsis,
-    artifactName: 'dsh-desktop-dev-windows-${arch}-setup.${ext}'
+    artifactName: 'clawport-desktop-dev-windows-${arch}-setup.${ext}'
   },
   publish: null
 }

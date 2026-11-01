@@ -129,7 +129,7 @@ function render(): void {
   card.setAttribute('role', centered ? 'dialog' : 'status')
   if (centered) card.setAttribute('aria-modal', 'false')
   card.setAttribute('aria-live', 'polite')
-  card.setAttribute('aria-label', locale === 'zh' ? 'DSH Desktop 更新' : 'DSH Desktop update')
+  card.setAttribute('aria-label', locale === 'zh' ? 'ClawPort 更新' : 'ClawPort update')
 
   const row = element('div', 'row')
   const badge = appIcon()
@@ -140,7 +140,7 @@ function render(): void {
   const headline = updateHeadline(status, locale)
   const body = element('div', 'body')
   const title = element('p', 'title')
-  title.textContent = status.phase === 'up-to-date' ? `DSH Desktop v${status.currentVersion}` : headline.title
+  title.textContent = status.phase === 'up-to-date' ? `ClawPort v${status.currentVersion}` : headline.title
   body.appendChild(title)
   row.appendChild(body)
 
@@ -351,7 +351,7 @@ function renderAbout(): void {
   card.tabIndex = -1
   card.setAttribute('role', 'dialog')
   card.setAttribute('aria-modal', 'false')
-  card.setAttribute('aria-label', zh ? '关于 DSH Desktop' : 'About DSH Desktop')
+  card.setAttribute('aria-label', zh ? '关于 ClawPort' : 'About ClawPort')
 
   const header = element('div', 'about-header')
   header.appendChild(appIcon())
@@ -375,10 +375,10 @@ function renderAbout(): void {
     aboutShadow?.querySelector<HTMLButtonElement>('.version-switch')?.focus()
   })
   switcher.appendChild(selectVersionBtn)
-  header.appendChild(switcher)
+  if (currentStatus && currentStatus.phase !== 'unsupported') header.appendChild(switcher)
   card.appendChild(header)
   const title = element('h2', 'about-title')
-  title.textContent = 'DSH Desktop'
+  title.textContent = 'ClawPort'
   card.appendChild(title)
   const version = element('p', 'about-line')
   version.textContent = `v${info.desktopVersion} (${zh ? '内置' : 'bundled'} Harness ${info.harnessVersion} `
@@ -388,7 +388,7 @@ function renderAbout(): void {
   const tooltip = element('span', 'tooltip')
   tooltip.id = 'harness-version-hint'
   tooltip.setAttribute('role', 'tooltip')
-  tooltip.textContent = zh ? 'Harness 随 DSH Desktop 更新。' : 'Harness is updated with DSH Desktop.'
+  tooltip.textContent = zh ? 'Harness 随 ClawPort 更新。' : 'Harness is updated with ClawPort.'
   hint.setAttribute('aria-describedby', tooltip.id)
   hint.appendChild(tooltip)
   version.append(hint, document.createTextNode(')'))

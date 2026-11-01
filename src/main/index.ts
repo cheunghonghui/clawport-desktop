@@ -2,6 +2,7 @@ import { isMemoryExit } from './resource-diagnostics'
 import { ProcessRecovery } from './process-recovery'
 import { ApplicationRollbackFlow } from './application-rollback-flow'
 import { developmentEnvironment } from './development-environment'
+import { PRODUCT_HARNESS_PORT, PRODUCT_NAME, PRODUCT_UPDATES_ENABLED } from './product-config'
 import { createDevelopmentRepairDemo } from './development-repair-demo'
 import { desktopFileUrl, navigateDesktopWindow, registerNavigationOwner } from './desktop-navigation'
 import { recoverStartupConfiguration } from './startup-config-recovery'
@@ -38,7 +39,6 @@ import {
 import { HarnessShell } from './harness-shell'
 import { HARNESS_SHELL_URL, HARNESS_BOOT_CHANNEL, HARNESS_BOOT_FAILED_CHANNEL, isHarnessShellUrl, isHarnessBootPage } from '../shared/harness-boot'
 import {
-  DEFAULT_HARNESS_PORT,
   extractDuplicateAgentPresetId,
   extractFailureCause,
   extractPluginFailureReferences,
@@ -442,15 +442,15 @@ function isDevelopmentBuild(): boolean {
   try {
     const metadata = JSON.parse(
       readFileSync(join(app.getAppPath(), 'package.json'), 'utf8')
-    ) as { dshDesktopChannel?: unknown }
-    return metadata.dshDesktopChannel === 'development'
+    ) as { clawportDesktopChannel?: unknown }
+    return metadata.clawportDesktopChannel === 'development'
   } catch {
     return false
   }
 }
 
 const developmentBuild = isDevelopmentBuild()
-const developmentConfig = developmentEnvironment(developmentBuild, DEFAULT_HARNESS_PORT)
+const developmentConfig = developmentEnvironment(developmentBuild, PRODUCT_HARNESS_PORT)
 
 /**
  * Record a renderer/GPU process loss in the harness log so the cause survives
@@ -609,18 +609,8 @@ function applyWindowChromeTheme(window: BrowserWindow, isDark: boolean): void {
 }
 
 function configureAppIdentity(): void {
-  if (developmentBuild) {
-    app.setName('DSH Desktop Dev')
-    app.setPath('userData', join(app.getPath('appData'), developmentConfig.profile))
-    return
-  }
-
-  app.setName('DSH Desktop')
-  // Keep the historical lowercase directory stable across product-name and
-  // branding changes. Harness stores workspaces, sessions, credentials, and
-  // custom presets below userData, so deriving this path from app.getName()
-  // would make an ordinary upgrade look like a fresh installation.
-  app.setPath('userData', join(app.getPath('appData'), 'dsh-desktop'))
+  app.setName(developmentBuild ? `${PRODUCT_NAME} Dev` : PRODUCT_NAME)
+  app.setPath('userData', join(app.getPath('appData'), developmentConfig.profile))
 }
 
 async function syncNativeTheme(window: BrowserWindow): Promise<void> {
@@ -1102,10 +1092,10 @@ function ensureTray(): void {
 
   const locale = harnessLocale()
   tray = new Tray(desktopIconPath())
-  tray.setToolTip('DSH Desktop')
+  tray.setToolTip('ClawPort')
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: locale === 'zh' ? '显示 DSH Desktop' : 'Show DSH Desktop', click: restoreMainWindow },
+      { label: locale === 'zh' ? '显示 ClawPort' : 'Show ClawPort', click: restoreMainWindow },
       { type: 'separator' },
       { label: locale === 'zh' ? '退出' : 'Exit', click: () => app.quit() }
     ])
@@ -1466,7 +1456,7 @@ async function quarantineInstalledLaunchAgentsForUpdate(dshHome: string): Promis
   }
   if (result.failures.length > 0) {
     for (const failure of result.failures) runtime.note(`[desktop] pre-update launch agent: ${failure}`)
-    throw new Error('Unable to stop background services before replacing DSH Desktop.')
+    throw new Error('Unable to stop background services before replacing ClawPort.')
   }
 }
 
@@ -1901,7 +1891,7 @@ function registerHarnessHandlers(): void {
   ipcMain.removeHandler('harness:restart')
   ipcMain.handle('harness:restart', async (event) => {
     if (!mainWindow || mainWindow.isDestroyed() || event.sender !== mainWindow.webContents) {
-      throw new Error('Harness restart is only available from the DSH Desktop window.')
+      throw new Error('Harness restart is only available from the ClawPort window.')
     }
     if (runtime.snapshot().phase !== 'ready') {
       throw new Error('Harness is not ready to restart.')
@@ -1971,7 +1961,7 @@ function registerHarnessHandlers(): void {
   ipcMain.handle('desktop-titlebar:set-theme', (event, isDark: unknown) => {
     assertTrustedMainWindowEvent(event)
     if (typeof isDark !== 'boolean') {
-      throw new Error('The DSH Desktop titlebar theme must be a boolean.')
+      throw new Error('The ClawPort titlebar theme must be a boolean.')
     }
     if (process.platform === 'win32' && mainWindow) {
       applyWindowChromeTheme(mainWindow, isDark)
@@ -2014,7 +2004,7 @@ function assertTrustedMainWindowEvent(event: IpcMainEvent | IpcMainInvokeEvent):
     event.sender !== mainWindow.webContents ||
     event.senderFrame !== mainWindow.webContents.mainFrame
   ) {
-    throw new Error('This action is only available from the main DSH Desktop window.')
+    throw new Error('This action is only available from the main ClawPort window.')
   }
 }
 
@@ -2051,19 +2041,19 @@ async function showAbout(window: BrowserWindow): Promise<void> {
   const checkForUpdatesLabel = locale === 'zh' ? '检查更新' : 'Check for Updates'
   const result = await dialog.showMessageBox(window, {
     type: 'info',
-    title: 'DSH Desktop',
-    message: locale === 'zh' ? '关于 DSH Desktop' : 'About DSH Desktop',
+    title: 'ClawPort',
+    message: locale === 'zh' ? '关于 ClawPort' : 'About ClawPort',
     detail: aboutDetail(
       app.getVersion(),
       bundledHarnessVersion(bundledRuntimeRoot()),
       locale
     ),
-    buttons: [checkForUpdatesLabel, locale === 'zh' ? '关闭' : 'Close'],
-    defaultId: 1,
-    cancelId: 1,
+    buttons: [...(PRODUCT_UPDATES_ENABLED ? [checkForUpdatesLabel] : []), locale === 'zh' ? '关闭' : 'Close'],
+    defaultId: PRODUCT_UPDATES_ENABLED ? 1 : 0,
+    cancelId: PRODUCT_UPDATES_ENABLED ? 1 : 0,
     noLink: true
   })
-  if (result.response === 0) await checkForUpdates(true)
+  if (PRODUCT_UPDATES_ENABLED && result.response === 0) await checkForUpdates(true)
 }
 
 /**
@@ -2212,7 +2202,7 @@ function reportNativeRecoveryFailure(failure: unknown): void {
   console.error('[desktop] native recovery failed', failureMessage)
   if (quitting || gpuFallbackRelaunching) return
   const locale = harnessLocale()
-  dialog.showErrorBox('DSH Desktop', applicationText(locale, 'windowRecovery.heading') + '\n\n' +
+  dialog.showErrorBox('ClawPort', applicationText(locale, 'windowRecovery.heading') + '\n\n' +
     applicationText(locale, 'windowRecovery.description'))
 }
 
@@ -3317,7 +3307,7 @@ function installMenu(): void {
           label: app.name,
           submenu: [
             {
-              label: isChinese ? '关于 DSH Desktop' : 'About DSH Desktop',
+              label: isChinese ? '关于 ClawPort' : 'About ClawPort',
               click: () => {
                 if (mainWindow && !mainWindow.isDestroyed()) {
                   void showAbout(mainWindow).catch(showUnexpectedError)
@@ -3326,12 +3316,14 @@ function installMenu(): void {
             },
             {
               label: checkForUpdatesLabel,
+              enabled: PRODUCT_UPDATES_ENABLED,
+              visible: PRODUCT_UPDATES_ENABLED,
               accelerator: 'CmdOrCtrl+U',
               click: () => void checkForUpdates(true).catch(showUnexpectedError)
             },
             {
-              label: isChinese ? '了解企业版' : 'Explore Enterprise',
-              click: () => void shell.openExternal('https://dshdesktop.com/zh/enterprise/').catch(showUnexpectedError)
+              label: isChinese ? 'ClawPort 网站' : 'ClawPort website',
+              click: () => void shell.openExternal('https://clawport.si/').catch(showUnexpectedError)
             },
             { type: 'separator' as const },
             // Role titles stay in Electron's English and can be rewritten to the
@@ -3388,6 +3380,8 @@ function installMenu(): void {
             { type: 'separator' as const },
             {
               label: checkForUpdatesLabel,
+              enabled: PRODUCT_UPDATES_ENABLED,
+              visible: PRODUCT_UPDATES_ENABLED,
               accelerator: 'CmdOrCtrl+U',
               click: () => void checkForUpdates(true).catch(showUnexpectedError)
             }
@@ -3447,7 +3441,7 @@ async function showMobilePairing(): Promise<void> {
     const options: MessageBoxOptions = {
       type: 'info',
       message: 'Harness is still starting.',
-      detail: 'Wait until DSH Desktop is ready, then connect your phone again.',
+      detail: 'Wait until ClawPort is ready, then connect your phone again.',
       buttons: ['OK']
     }
     await (mainWindow ? dialog.showMessageBox(mainWindow, options) : dialog.showMessageBox(options))
@@ -3950,7 +3944,7 @@ async function bootstrap(): Promise<void> {
     }
   })
   if (developmentRepairDemo && mainWindow) {
-    mainWindow.setTitle('DSH Desktop · V0.13.0 维修演示')
+    mainWindow.setTitle('ClawPort · V0.13.0 维修演示')
     mainWindow.on('page-title-updated', event => event.preventDefault())
   }
   installMenu()

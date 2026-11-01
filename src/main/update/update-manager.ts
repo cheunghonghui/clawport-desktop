@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { ApplicationRollback, type ApplicationRollbackStatus } from './application-rollback'
 import { checkDesktopUpdate } from '../desktop-service'
 import { isPrereleaseVersion, isVersion } from '../desktop-service/service'
+import { PRODUCT_UPDATES_ENABLED } from '../product-config'
 import { app, BrowserWindow, ipcMain, powerMonitor } from 'electron'
 import electronUpdater from 'electron-updater'
 import type { UpdateStatus } from '../../shared/contracts'
@@ -34,8 +35,12 @@ import {
 } from './version-catalog'
 
 const { autoUpdater } = electronUpdater
+const UPDATES_DISABLED_REASON = 'updates-disabled'
+const UPDATES_DISABLED_MESSAGE = 'Updates are not available for this product.'
 
-let status = initialUpdateStatus(app.getVersion())
+let status = PRODUCT_UPDATES_ENABLED
+  ? initialUpdateStatus(app.getVersion())
+  : reduceUpdateStatus(initialUpdateStatus(app.getVersion()), { type: 'unsupported', message: UPDATES_DISABLED_MESSAGE })
 let prepareToInstall: (() => Promise<void>) | undefined
 let installFailed: (() => Promise<void>) | undefined
 let canCheckAutomatically: (() => boolean) | undefined
@@ -69,6 +74,7 @@ function applicationRollback(): ApplicationRollback {
 }
 
 export async function getApplicationRollbackStatus(): Promise<ApplicationRollbackStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) return { available: false, reason: UPDATES_DISABLED_REASON }
   try {
     const result = await applicationRollback().status()
     if (!result.available || !result.targetVersion) return result
@@ -87,6 +93,7 @@ export async function getApplicationRollbackStatus(): Promise<ApplicationRollbac
 
 /** No renderer-supplied version: recovery can only return to the actual prior installation. */
 export async function rollbackApplication(): Promise<UpdateStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) throw new Error(UPDATES_DISABLED_REASON)
   if (rollbackPromise) return rollbackPromise
   rollbackPromise = (async () => {
     const available = await getApplicationRollbackStatus()
@@ -132,7 +139,9 @@ export function registerUpdateHandlers(options: { locale?: () => 'en' | 'zh' } =
   ipcMain.handle('updates:install', () => installDownloadedUpdate())
   ipcMain.handle('updates:skip', (_event, version: unknown) => skipUpdate(version))
   ipcMain.handle('updates:download', () => downloadAvailableUpdate())
-  ipcMain.handle('updates:list-versions', () => fetchAvailableReleases(app.getVersion()))
+  ipcMain.handle('updates:list-versions', async () =>
+    PRODUCT_UPDATES_ENABLED ? fetchAvailableReleases(app.getVersion()) : []
+  )
   ipcMain.handle('updates:install-version', (_event, version: unknown) =>
     installSpecificVersion(version)
   )
@@ -157,6 +166,7 @@ function currentSkippedVersion(): string | undefined {
  * version they skipped.
  */
 export function skipUpdate(version: unknown): UpdateStatus {
+  if (!PRODUCT_UPDATES_ENABLED) return setProductUpdatesUnavailable()
   if (rollbackOwnsUpdater || installing) return getUpdateStatus()
   if (typeof version !== 'string' || !version) return getUpdateStatus()
   skippedVersion = version
@@ -179,6 +189,11 @@ export function startUpdateManager(options: {
   if (started) return
   started = true
 
+  if (!PRODUCT_UPDATES_ENABLED) {
+    setProductUpdatesUnavailable()
+    return
+  }
+
   if (!supportsUpdates()) {
     transition({
       type: 'unsupported',
@@ -197,6 +212,7 @@ export function startUpdateManager(options: {
 }
 
 export async function checkForUpdates(manual = false, source: UpdateStatus['source'] = manual ? 'manual' : 'runtime'): Promise<UpdateStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) return setProductUpdatesUnavailable(manual)
   if (rollbackOwnsUpdater || installing || (!manual && canCheckAutomatically?.() === false)) return getUpdateStatus()
   if (manual) status.presentationId = ++presentationId
   if (!supportsUpdates()) {
@@ -281,6 +297,7 @@ export async function checkForUpdates(manual = false, source: UpdateStatus['sour
  * action — an update sits at `available` until it is taken.
  */
 export async function downloadAvailableUpdate(): Promise<UpdateStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) return setProductUpdatesUnavailable()
   return downloadAvailableUpdateOwned()
 }
 
@@ -314,6 +331,7 @@ async function downloadAvailableUpdateOwned(owner?: symbol): Promise<UpdateStatu
  * — there is no version pinning.
  */
 export async function installSpecificVersion(version: unknown): Promise<UpdateStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) return setProductUpdatesUnavailable()
   return installSpecificVersionOwned(version)
 }
 
@@ -362,8 +380,10 @@ async function installSpecificVersionOwned(version: unknown, owner?: symbol): Pr
   return getUpdateStatus()
 }
 
-export async function installDownloadedUpdate(): Promise<void> {
+export async function installDownloadedUpdate(): Promise<UpdateStatus> {
+  if (!PRODUCT_UPDATES_ENABLED) return setProductUpdatesUnavailable()
   await installDownloadedUpdateOwned()
+  return getUpdateStatus()
 }
 
 async function installDownloadedUpdateOwned(owner?: symbol): Promise<boolean> {
@@ -475,6 +495,12 @@ function transition(event: UpdateStateEvent, manualOverride?: boolean): void {
   for (const window of BrowserWindow.getAllWindows()) {
     if (!window.isDestroyed()) window.webContents.send('updates:status-changed', getUpdateStatus())
   }
+}
+
+function setProductUpdatesUnavailable(manual = false): UpdateStatus {
+  if (manual) status.presentationId = ++presentationId
+  transition({ type: 'unsupported', message: UPDATES_DISABLED_MESSAGE }, manual || undefined)
+  return getUpdateStatus()
 }
 
 function checkAfterResume(): void {

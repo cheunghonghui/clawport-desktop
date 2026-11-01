@@ -2,9 +2,10 @@ import { readFileSync } from 'node:fs'
 import vm from 'node:vm'
 import ts from 'typescript'
 import { describe, expect, it, vi } from 'vitest'
+import { PRODUCT_UPDATES_ENABLED } from '../src/main/product-config'
 
-describe('Enterprise app menu entry', () => {
-  it.each(['zh', 'en'])('opens the enterprise website below updates in %s', async locale => {
+describe('ClawPort app menu entry', () => {
+  it.each(['zh', 'en'])('opens the product website with updates unavailable in %s', async locale => {
     const source = readFileSync(new URL('../src/main/index.ts', import.meta.url), 'utf8')
     const start = source.indexOf('function installMenu(): void {')
     const end = source.indexOf('\n/**', start)
@@ -16,22 +17,25 @@ describe('Enterprise app menu entry', () => {
     const quit = vi.fn()
     const sendActionToFirstResponder = vi.fn()
     const context = {
-      harnessLocale: () => locale, process: { platform: 'darwin' }, app: { name: 'DSH Desktop', hide, quit },
+      PRODUCT_UPDATES_ENABLED,
+      harnessLocale: () => locale, process: { platform: 'darwin' }, app: { name: 'ClawPort', hide, quit },
       shell: { openExternal }, showUnexpectedError, developmentRepairDemo: undefined,
       Menu: { buildFromTemplate, setApplicationMenu: vi.fn(), sendActionToFirstResponder }
     }
     vm.runInNewContext(ts.transpile(source.slice(start, end)) + '\ninstallMenu()', context)
     const menu = buildFromTemplate.mock.calls[0]?.[0][0].submenu
-    expect(menu[0].label).toBe(locale === 'zh' ? '关于 DSH Desktop' : 'About DSH Desktop')
+    expect(menu[0].label).toBe(locale === 'zh' ? '关于 ClawPort' : 'About ClawPort')
     expect(menu[1].label).toBe(locale === 'zh' ? '检查更新…' : 'Check for Updates…')
-    expect(menu[2].label).toBe(locale === 'zh' ? '了解企业版' : 'Explore Enterprise')
-    expect(menu[4].label).toBe(locale === 'zh' ? '隐藏 DSH Desktop' : 'Hide DSH Desktop')
+    expect(menu[1].visible).toBe(false)
+    expect(menu[1].enabled).toBe(false)
+    expect(menu[2].label).toBe(locale === 'zh' ? 'ClawPort 网站' : 'ClawPort website')
+    expect(menu[4].label).toBe(locale === 'zh' ? '隐藏 ClawPort' : 'Hide ClawPort')
     expect(menu[4].accelerator).toBe('Command+H')
     expect(menu[4].role).toBeUndefined()
     expect(menu[5].label).toBe(locale === 'zh' ? '隐藏其他' : 'Hide Others')
     expect(menu[5].accelerator).toBe('Command+Alt+H')
     expect(menu[6].label).toBe(locale === 'zh' ? '全部显示' : 'Show All')
-    expect(menu[8].label).toBe(locale === 'zh' ? '退出 DSH Desktop' : 'Quit DSH Desktop')
+    expect(menu[8].label).toBe(locale === 'zh' ? '退出 ClawPort' : 'Quit ClawPort')
     expect(menu[8].accelerator).toBe('Command+Q')
     menu[4].click()
     menu[5].click()
@@ -43,7 +47,7 @@ describe('Enterprise app menu entry', () => {
     expect(quit).toHaveBeenCalledOnce()
     menu[2].click()
     await Promise.resolve()
-    expect(openExternal).toHaveBeenCalledWith('https://dshdesktop.com/zh/enterprise/')
+    expect(openExternal).toHaveBeenCalledWith('https://clawport.si/')
     const failure = new Error('browser unavailable')
     openExternal.mockRejectedValueOnce(failure)
     menu[2].click()
