@@ -112,6 +112,103 @@ window.__ModuleLoader__.load({
       }, t('learnMore'), React.createElement('span', { 'aria-hidden': true }, ' ↗'))
     }
 
+    const CLOUD_NS = 'dsh-desktop-cloud-account'
+    const EMPTY_CLOUD_IDENTITY = { phase: 'signedOut', revision: 0, secureStorageAvailable: true }
+
+    function CloudAccountSection({ t }) {
+      const [snapshot, setSnapshot] = React.useState(EMPTY_CLOUD_IDENTITY)
+      const [busy, setBusy] = React.useState(false)
+      const mounted = React.useRef(true)
+      React.useEffect(() => {
+        mounted.current = true
+        const bridge = window.dshDesktop
+        if (typeof bridge?.getCloudIdentity !== 'function') {
+          setSnapshot({ phase: 'error', revision: 0, secureStorageAvailable: false, error: { code: 'bridge_unavailable', message: t('unavailable') } })
+          return () => { mounted.current = false }
+        }
+        const unsubscribe = bridge.onCloudIdentityChanged?.(value => {
+          if (mounted.current) setSnapshot(value)
+        })
+        void bridge.getCloudIdentity().then(value => {
+          if (mounted.current) setSnapshot(value)
+        }).catch(() => {
+          if (mounted.current) setSnapshot({ phase: 'error', revision: 0, secureStorageAvailable: true, error: { code: 'bridge_failed', message: t('unavailable') } })
+        })
+        return () => { mounted.current = false; unsubscribe?.() }
+      }, [t])
+
+      const perform = async operation => {
+        if (busy) return
+        setBusy(true)
+        try {
+          const value = await operation()
+          if (mounted.current) setSnapshot(value)
+        } catch {
+          if (mounted.current) setSnapshot(current => ({ ...current, phase: 'error', error: { code: 'bridge_failed', message: t('unavailable') } }))
+        } finally {
+          if (mounted.current) setBusy(false)
+        }
+      }
+      const bridge = window.dshDesktop
+      const statusKey = snapshot.phase === 'signedOut' ? 'signedOut'
+        : snapshot.phase === 'authorizing' ? 'authorizing'
+          : snapshot.phase === 'refreshing' ? 'refreshing'
+            : snapshot.phase === 'connected' ? 'connected'
+              : snapshot.phase === 'offline' ? 'offline'
+                : snapshot.phase === 'reauthRequired' ? 'reauthRequired' : 'error'
+      const logoutPending = snapshot.error?.code === 'logout_pending'
+      const login = !logoutPending && (snapshot.phase === 'signedOut' || snapshot.phase === 'reauthRequired' || snapshot.phase === 'error')
+      const retry = logoutPending || snapshot.phase === 'offline'
+
+      return React.createElement('section', {
+        'data-clawport-cloud-account': true,
+        'data-clawport-cloud-phase': snapshot.phase,
+        'aria-labelledby': 'clawport-cloud-account-heading'
+      },
+      React.createElement('header', { 'data-cloud-header': true },
+        React.createElement('div', null,
+          React.createElement('h2', { id: 'clawport-cloud-account-heading' }, t('title')),
+          React.createElement('p', { 'data-cloud-status': snapshot.phase, 'aria-live': 'polite' }, t(statusKey))
+        ),
+        React.createElement('div', { 'data-cloud-actions': true },
+          login && React.createElement('button', {
+            type: 'button', disabled: busy || !snapshot.secureStorageAvailable,
+            'data-cloud-action': 'login',
+            onClick: () => { void perform(() => bridge.startCloudLogin()) }
+          }, busy ? t('working') : t('login')),
+          retry && React.createElement('button', {
+            type: 'button', disabled: busy,
+            'data-cloud-action': 'retry',
+            onClick: () => { void perform(() => bridge.refreshCloudIdentity()) }
+          }, busy ? t('working') : t('retry')),
+          snapshot.phase === 'connected' && React.createElement('button', {
+            type: 'button', disabled: busy,
+            'data-cloud-action': 'logout',
+            onClick: () => { void perform(() => bridge.revokeCloudIdentity()) }
+          }, busy ? t('working') : t('logout'))
+        )
+      ),
+      !snapshot.secureStorageAvailable && React.createElement('p', { role: 'alert', 'data-cloud-error': true }, t('secureStorageUnavailable')),
+      snapshot.publicUserCode && React.createElement('div', { 'data-cloud-user-code': true },
+        React.createElement('span', null, t('userCode')),
+        React.createElement('strong', null, snapshot.publicUserCode)
+      ),
+      snapshot.phase === 'connected' && snapshot.identity && snapshot.workspace && snapshot.device && React.createElement('dl', { 'data-cloud-details': true },
+        React.createElement('div', null, React.createElement('dt', null, t('user')), React.createElement('dd', null,
+          React.createElement('strong', null, snapshot.identity.displayName),
+          snapshot.identity.email && React.createElement('span', null, snapshot.identity.email))),
+        React.createElement('div', null, React.createElement('dt', null, t('firm')), React.createElement('dd', null,
+          React.createElement('strong', null, snapshot.workspace.tenantName),
+          React.createElement('span', null, snapshot.workspace.projectName))),
+        React.createElement('div', null, React.createElement('dt', null, t('device')), React.createElement('dd', null,
+          React.createElement('strong', null, snapshot.device.name),
+          React.createElement('span', null, snapshot.device.platform === 'darwin' ? 'macOS' : 'Windows')))
+      ),
+      snapshot.error && React.createElement('p', { role: 'alert', 'data-cloud-error': true },
+        snapshot.error.code === 'logout_pending' ? t('logoutPending') : snapshot.error.message)
+      )
+    }
+
     const REPAIR_NS = 'dsh-desktop-repair'
     function DesktopUtilityActions({ t, wide }) {
       const [busy, setBusy] = React.useState(false)
@@ -195,6 +292,28 @@ window.__ModuleLoader__.load({
 
     const inject = ['locale', 'slots', 'remote.session', 'sessions', 'uiWorkspace']
     function apply(ctx) {
+      ctx.effect(() => ctx.locale.register(CLOUD_NS, {
+        zh: {
+          nav: 'ClawPort 账号', title: 'ClawPort 账号', signedOut: '未登录', authorizing: '等待浏览器确认',
+          refreshing: '正在刷新账号', connected: '已连接', offline: '离线', reauthRequired: '需要重新登录', error: '账号不可用',
+          login: '登录 ClawPort', retry: '重试', logout: '退出登录', working: '请稍候…', userCode: '确认码',
+          user: '用户', firm: '律所与项目', device: '设备', unavailable: '暂时无法读取 ClawPort 账号。',
+          secureStorageUnavailable: '系统安全存储不可用，无法登录 ClawPort。', logoutPending: '云端退出尚未完成，联网后将自动重试。'
+        },
+        en: {
+          nav: 'ClawPort Account', title: 'ClawPort Account', signedOut: 'Signed out', authorizing: 'Waiting for browser confirmation',
+          refreshing: 'Refreshing account', connected: 'Connected', offline: 'Offline', reauthRequired: 'Sign-in required', error: 'Account unavailable',
+          login: 'Sign in with ClawPort', retry: 'Retry', logout: 'Sign out', working: 'Please wait…', userCode: 'Confirmation code',
+          user: 'User', firm: 'Firm and project', device: 'Device', unavailable: 'ClawPort account is temporarily unavailable.',
+          secureStorageUnavailable: 'System secure storage is unavailable. ClawPort sign-in is disabled.', logoutPending: 'Cloud sign-out is pending and will retry when online.'
+        }
+      }))
+      const cloudText = ctx.locale.bind(CLOUD_NS)
+      ctx.slots.inject('settings.section', () => ctx.slots.register({
+        name: 'settings.section', id: 'clawport-account', order: -20,
+        label: () => cloudText('nav'), locale: CLOUD_NS,
+        inject: () => ({ t: cloudText })
+      }, CloudAccountSection))
       ctx.effect(() => ctx.locale.register(ENTERPRISE_NS, {
         zh: { learnMore: '了解企业版' }, en: { learnMore: 'Explore Enterprise' }
       }))
@@ -228,6 +347,26 @@ window.__ModuleLoader__.load({
           }
           [data-dsh-enterprise-entry]:hover { color:var(--dsw-alias-label-primary); background:var(--dsw-alias-interactive-bg-hover); }
           [data-dsh-enterprise-entry]:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary); outline-offset:1px; }
+          [data-clawport-cloud-account] { width:min(100%, 720px); color:var(--dsw-alias-label-primary); }
+          [data-cloud-header] { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding-bottom:20px; border-bottom:1px solid var(--dsw-alias-border-l2); }
+          [data-cloud-header] h2 { margin:0; font-size:20px; line-height:28px; letter-spacing:0; }
+          [data-cloud-status] { margin:4px 0 0; color:var(--dsw-alias-label-secondary); font-size:13px; line-height:20px; }
+          [data-cloud-status=connected] { color:var(--dsw-alias-state-success-primary); }
+          [data-cloud-status=offline], [data-cloud-status=error], [data-cloud-status=reauthRequired] { color:var(--dsw-alias-state-error-primary); }
+          [data-cloud-actions] { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; }
+          [data-cloud-actions] button { min-height:34px; padding:0 14px; border:1px solid var(--dsw-alias-border-l2); border-radius:8px; color:var(--dsw-alias-label-primary); background:var(--dsw-alias-bg-module-platform); font:inherit; font-size:13px; cursor:pointer; }
+          [data-cloud-actions] button:hover:not(:disabled) { background:var(--dsw-alias-interactive-bg-hover); }
+          [data-cloud-actions] button:focus-visible { outline:2px solid var(--dsw-alias-state-business-primary); outline-offset:2px; }
+          [data-cloud-actions] button:disabled { opacity:.5; cursor:default; }
+          [data-cloud-user-code] { display:flex; align-items:baseline; justify-content:space-between; gap:16px; margin-top:20px; padding:14px 0; border-bottom:1px solid var(--dsw-alias-border-l2); color:var(--dsw-alias-label-secondary); font-size:13px; }
+          [data-cloud-user-code] strong { color:var(--dsw-alias-label-primary); font-size:18px; letter-spacing:0; }
+          [data-cloud-details] { margin:0; }
+          [data-cloud-details] > div { display:grid; grid-template-columns:minmax(112px, .35fr) minmax(0, 1fr); gap:16px; padding:18px 0; border-bottom:1px solid var(--dsw-alias-border-l2); }
+          [data-cloud-details] dt { color:var(--dsw-alias-label-secondary); font-size:13px; }
+          [data-cloud-details] dd { display:grid; gap:3px; min-width:0; margin:0; overflow-wrap:anywhere; font-size:13px; }
+          [data-cloud-details] dd span { color:var(--dsw-alias-label-secondary); }
+          [data-cloud-error] { margin:16px 0 0; color:var(--dsw-alias-state-error-primary); font-size:13px; line-height:20px; }
+          @media (max-width: 620px) { [data-cloud-header] { align-items:stretch; flex-direction:column; } [data-cloud-actions] { justify-content:flex-start; } [data-cloud-details] > div { grid-template-columns:1fr; gap:6px; } }
           :root { --dsh-page-title-top-spacing:56px; }
           [data-dsh-sidebar-settings] { display:flex; align-items:center; }
           [data-dsh-sidebar-settings-content] { flex:1; min-width:0; }

@@ -88,6 +88,7 @@ describe('DSH Desktop client slot occupants', () => {
 
     expect(plugin.inject).toEqual(['locale', 'slots', 'remote.session', 'sessions', 'uiWorkspace'])
     expect(registrations.map(({ config }) => config.name)).toEqual([
+      'settings.section',
       'settings.sidebar.footer',
       'sidebar.settings.action',
       'conversation.input.dock',

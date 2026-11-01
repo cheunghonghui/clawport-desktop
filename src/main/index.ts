@@ -2,7 +2,7 @@ import { isMemoryExit } from './resource-diagnostics'
 import { ProcessRecovery } from './process-recovery'
 import { ApplicationRollbackFlow } from './application-rollback-flow'
 import { developmentEnvironment } from './development-environment'
-import { PRODUCT_HARNESS_PORT, PRODUCT_NAME, PRODUCT_UPDATES_ENABLED } from './product-config'
+import { PRODUCT_HARNESS_PORT, PRODUCT_NAME, PRODUCT_UPDATES_ENABLED, resolveProductCloudOrigin } from './product-config'
 import { createDevelopmentRepairDemo } from './development-repair-demo'
 import { desktopFileUrl, navigateDesktopWindow, registerNavigationOwner } from './desktop-navigation'
 import { recoverStartupConfiguration } from './startup-config-recovery'
@@ -29,6 +29,7 @@ import {
   ipcMain,
   Menu,
   nativeTheme,
+  safeStorage,
   shell,
   Tray,
   utilityProcess,
@@ -217,9 +218,13 @@ import { shouldKeepRunningInBackground } from './close-to-tray'
 import { RendererNavigationRecovery } from './main-window-recovery'
 import { rendererDiagnosticText, rendererDiagnosticUrl } from './renderer-diagnostics'
 import { requestWindowRestart } from './window-restart-prompt'
-import { freemem, release, totalmem } from 'node:os'
+import { freemem, hostname, release, totalmem } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { loadDesktopWindowAfterStop } from './desktop-window-load'
+import { CloudApiClient } from './cloud/api-client'
+import { CloudCredentialVault } from './cloud/vault'
+import { CloudIdentityService } from './cloud/service'
+import { registerCloudIdentityIpc } from './cloud/ipc'
 
 type PluginRecoveryAction = `agent:${string}` | 'show-log' | 'quit' | 'restart' | 'refresh' | 'safe-mode' | 'auto-process' | 'check-updates' | 'rollback'
 type WebImportAction = 'import' | 'skip'
@@ -265,6 +270,8 @@ const applicationRollbackFlow = new ApplicationRollbackFlow(async state => {
 })
 const repairDrafts = new RepairDrafts()
 let repairAgentService: RepairAgentService | undefined
+let cloudIdentityService: CloudIdentityService | undefined
+let disposeCloudIdentityIpc: (() => void) | undefined
 let repairAgentOpening: Promise<{ ok: boolean; error?: string }> | undefined
 /** A repair prompt from the Recovery page, started by the Safe Mode page load. */
 let pendingRepairPrompt: string | undefined
@@ -3513,6 +3520,21 @@ async function bootstrap(): Promise<void> {
     }
   })
   createWindow()
+  const cloudOrigin = resolveProductCloudOrigin(developmentBuild)
+  cloudIdentityService = new CloudIdentityService({
+    api: new CloudApiClient(cloudOrigin, (url, init) => net.fetch(url, init)),
+    vault: new CloudCredentialVault(join(app.getPath('userData'), 'cloud-identity'), safeStorage),
+    openExternal: url => shell.openExternal(url),
+    deviceName: hostname() || app.getName(),
+    platform: process.platform === 'win32' ? 'win32' : 'darwin',
+    appVersion: app.getVersion()
+  })
+  disposeCloudIdentityIpc = registerCloudIdentityIpc({
+    ipcMain,
+    service: cloudIdentityService,
+    getMainWindow: () => mainWindow
+  })
+  void cloudIdentityService.refresh()
   runtime = new HarnessRuntime({
     // A packaged app's stdout may be a closed pipe; only mirror logs in development.
     echoLogs: !app.isPackaged,
@@ -4016,7 +4038,14 @@ if (isDaemonLaunch(process.env, process.platform)) {
     app.on('window-all-closed', () => {
       if (process.platform !== 'darwin') app.quit()
     })
-    app.on('will-quit', () => { applicationRollbackFlow.abort(); applicationRollbackVisible = false })
+    app.on('will-quit', () => {
+      applicationRollbackFlow.abort()
+      applicationRollbackVisible = false
+      disposeCloudIdentityIpc?.()
+      disposeCloudIdentityIpc = undefined
+      cloudIdentityService?.dispose()
+      cloudIdentityService = undefined
+    })
     app.on('before-quit', (event) => {
       desktopDiagnostics?.markCleanExit()
       if (quitting || !runtime) return
